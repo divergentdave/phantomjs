@@ -1,3 +1,4 @@
+
 // Copyright 2012 The Obvious Corporation.
 
 /*
@@ -24,7 +25,7 @@ var util = require('util')
 var which = require('which')
 
 var cdnUrl = process.env.PHANTOMJS_CDNURL || 'https://github.com/bprodoehl/phantomjs/releases/download/v'
-var downloadUrl = cdnUrl + helper.version + '/phantomjs-' + helper.version + '-'
+var downloadUrl = cdnUrl + '-' + helper.version   + '/phantomjs-'; 
 
 var originalPath = process.env.PATH
 
