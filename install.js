@@ -20,7 +20,7 @@ var url = require('url')
 var util = require('util')
 var which = require('which')
 
-var cdnUrl = process.env.npm_config_phantomjs_cdnurl || process.env.PHANTOMJS_CDNURL ||  'https://bitbucket.org/ariya/phantomjs/downloads'
+var cdnUrl = process.env.npm_config_phantomjs_cdnurl || process.env.PHANTOMJS_CDNURL ||  'https://github.com/bprodoehl/phantomjs/releases/download/v'
 var downloadUrl = cdnUrl + '/phantomjs-' + helper.version + '-'
 
 var originalPath = process.env.PATH
@@ -103,7 +103,7 @@ whichDeferred.promise
 
     // Can't use a global version so start a download.
     if (process.platform === 'linux' && process.arch === 'x64') {
-      downloadUrl += 'linux-x86_64.tar.bz2'
+        downloadUrl += 'u1404-x86_64.zip'
     } else if (process.platform === 'linux') {
       downloadUrl += 'linux-i686.tar.bz2'
     } else if (process.platform === 'darwin' || process.platform === 'openbsd' || process.platform === 'freebsd') {
