@@ -10,18 +10,21 @@ var requestProgress = require('request-progress')
 var progress = require('progress')
 var AdmZip = require('adm-zip')
 var cp = require('child_process')
-var fs = require('fs-extra')
+var fs = require('fs')
 var helper = require('./lib/phantomjs')
 var kew = require('kew')
+var mkdirp = require('mkdirp')
+var ncp = require('ncp')
 var npmconf = require('npmconf')
 var path = require('path')
 var request = require('request')
+var rimraf = require('rimraf')
 var url = require('url')
 var util = require('util')
 var which = require('which')
 
-var cdnUrl = process.env.npm_config_phantomjs_cdnurl || process.env.PHANTOMJS_CDNURL ||  'https://github.com/bprodoehl/phantomjs/releases/download/v'
-var downloadUrl = cdnUrl + '/phantomjs-' + helper.version + '-'
+var cdnUrl = process.env.PHANTOMJS_CDNURL || 'https://github.com/bprodoehl/phantomjs/releases/download/v'
+var downloadUrl = cdnUrl + helper.version + '/phantomjs-' + helper.version + '-'
 
 var originalPath = process.env.PATH
 
@@ -103,13 +106,9 @@ whichDeferred.promise
 
     // Can't use a global version so start a download.
     if (process.platform === 'linux' && process.arch === 'x64') {
-        downloadUrl += 'u1404-x86_64.zip'
-    } else if (process.platform === 'linux') {
-      downloadUrl += 'linux-i686.tar.bz2'
+      downloadUrl += 'u1404-x86_64.zip'
     } else if (process.platform === 'darwin' || process.platform === 'openbsd' || process.platform === 'freebsd') {
       downloadUrl += 'macosx.zip'
-    } else if (process.platform === 'win32') {
-      downloadUrl += 'windows.zip'
     } else {
       console.error('Unexpected platform or architecture:', process.platform, process.arch)
       exit(1)
@@ -172,7 +171,7 @@ function exit(code) {
 function findSuitableTempDirectory(npmConf) {
   var now = Date.now()
   var candidateTmpDirs = [
-    process.env.TMPDIR || process.env.TEMP || npmConf.get('tmp'),
+    process.env.TEMP || process.env.TMPDIR || npmConf.get('tmp'),
     '/tmp',
     path.join(process.cwd(), 'tmp')
   ]
@@ -181,7 +180,7 @@ function findSuitableTempDirectory(npmConf) {
     var candidatePath = path.join(candidateTmpDirs[i], 'phantomjs')
 
     try {
-      fs.mkdirsSync(candidatePath, '0777')
+      mkdirp.sync(candidatePath, '0777')
       // Make double sure we have 0777 permissions; some operating systems
       // default umask does not allow write by default.
       fs.chmodSync(candidatePath, '0777')
@@ -202,19 +201,12 @@ function findSuitableTempDirectory(npmConf) {
 
 
 function getRequestOptions(conf) {
-  var strictSSL = conf.get('strict-ssl')
-  if (process.version == 'v0.10.34') {
-    console.log('Node v0.10.34 detected, turning off strict ssl due to https://github.com/joyent/node/issues/8894')
-    strictSSL = false
-  }
-
-
   var options = {
     uri: downloadUrl,
     encoding: null, // Get response as a buffer
     followRedirect: true, // The default download path redirects to a CDN URL.
     headers: {},
-    strictSSL: strictSSL
+    strictSSL: conf.get('strict-ssl')
   }
 
   var proxyUrl = conf.get('https-proxy') || conf.get('http-proxy') || conf.get('proxy')
@@ -297,7 +289,7 @@ function extractDownload(filePath) {
   var extractedPath = filePath + '-extract-' + Date.now()
   var options = {cwd: extractedPath}
 
-  fs.mkdirsSync(extractedPath, '0777')
+  mkdirp.sync(extractedPath, '0777')
   // Make double sure we have 0777 permissions; some operating systems
   // default umask does not allow write by default.
   fs.chmodSync(extractedPath, '0777')
@@ -331,18 +323,28 @@ function extractDownload(filePath) {
 
 function copyIntoPlace(extractedPath, targetPath) {
   console.log('Removing', targetPath)
-  return kew.nfcall(fs.remove, targetPath).then(function () {
+  return kew.nfcall(rimraf, targetPath).then(function () {
     // Look for the extracted directory, so we can rename it.
     var files = fs.readdirSync(extractedPath)
     for (var i = 0; i < files.length; i++) {
       var file = path.join(extractedPath, files[i])
       if (fs.statSync(file).isDirectory() && file.indexOf(helper.version) != -1) {
         console.log('Copying extracted folder', file, '->', targetPath)
-        return kew.nfcall(fs.move, file, targetPath)
+        return kew.nfcall(ncp, file, targetPath)
       }
     }
 
     console.log('Could not find extracted file', files)
     throw new Error('Could not find extracted file')
+  })
+  .then(function () {
+    // Cleanup extracted directory after it's been copied
+    console.log('Removing', extractedPath)
+    return kew.nfcall(rimraf, extractedPath).fail(function (e) {
+      // Swallow the error quietly.
+      console.warn(e)
+      console.warn('Unable to remove temporary files at "' + extractedPath +
+          '", see https://github.com/Obvious/phantomjs/issues/108 for details.')
+    })
   })
 }
